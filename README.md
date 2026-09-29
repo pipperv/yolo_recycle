@@ -5,7 +5,7 @@ This project detects and segments **paper cups** in images from a conveyor-mount
 The pipeline has three parts:
 
 1. **Data acquisition**: the robot's vision system (ABB PickMaster with a custom package) sends camera images to a Python TCP server, which stores them for the dataset (`socket/record_dataset.py`).
-2. **Training**: a YOLO segmentation model is trained on the labeled dataset with one class, `paper_cup` (`train.py`).
+2. **Training**: a YOLO11n-seg model is fine-tuned on the labeled dataset with one class, `paper_cup` (`train.py`).
 3. **Inference for picking**: the trained model runs on a TCP server that gets images from PickMaster and returns the pick position of each cup (`socket/yolo_socket.py`).
 
 For offline testing, `yolo_webcam.py` and `yolo_video.py` run the model on a webcam or on recorded videos.
@@ -17,7 +17,7 @@ For offline testing, `yolo_webcam.py` and `yolo_video.py` run the model on a web
 ```
 yolo-recycle/
 ├── models/
-│   └── pat-papercup-seg.pt   # Trained segmentation model
+│   └── pat-papercup-seg.pt   # Trained model (download it, see "Download the trained model")
 ├── docs/images/              # Images used in this README
 ├── videos/                   # Test videos (download them, see "Testing")
 ├── socket/
@@ -50,6 +50,31 @@ python -c "import torch; print(torch.cuda.is_available())"
 ```
 
 > Do not install the `roboflow` Python package in this environment. It depends on `opencv-python-headless`, which replaces the OpenCV build that `cv2.imshow` needs, so the video windows stop working.
+
+## Download the trained model
+
+The trained model is not stored in this repository. Download it and save it as `models/pat-papercup-seg.pt`:
+
+**[pat-papercup-seg.pt (Google Drive)](https://drive.google.com/file/d/1XrCM_mmmXf29Fr4BsTuiotb4yLAcqrCA/view?usp=sharing)** (6 MB)
+
+| | |
+|---|---|
+| Base architecture | **YOLO11n-seg** (Ultralytics YOLO11, nano size, instance segmentation) |
+| Pretrained weights | COCO (`yolo11n-seg.pt`), then fine-tuned on this project's dataset |
+| Classes | 1: `paper_cup` |
+| Input size | 640 × 640 |
+| Trained with | Ultralytics 8.3.37 |
+
+Results on the validation set (180 images, 214 cups):
+
+| | Precision | Recall | mAP50 | mAP50-95 |
+|---|---|---|---|---|
+| Masks | 0.909 | 0.949 | 0.965 | 0.900 |
+| Boxes | | | 0.968 | 0.946 |
+
+Inference takes about 4 ms per image on an RTX 3060 Laptop GPU.
+
+You only need this file to run the inference scripts or to fine-tune the existing model. To train from a base model, see [Train](#2-train).
 
 ## 1. Download the dataset
 
@@ -93,30 +118,65 @@ Downloading it requires a Roboflow API key. A free account works.
 
 ## 2. Train
 
+`train.py` trains a segmentation model on the dataset described in `data.yaml`. Download the dataset first (see step 1).
+
+By default it starts from **YOLO11n-seg** pretrained on COCO, the same base as the published model, so you do **not** need the trained model to train:
+
 ```powershell
 python train.py
 ```
 
-`train.py` fine-tunes the existing model `models/pat-papercup-seg.pt` on the dataset described in `data.yaml`, with these settings:
+### Choosing the starting model
 
-| Parameter | Value | Notes |
+Use `--model` to choose the model training starts from. It accepts any Ultralytics segmentation model name, which is downloaded automatically the first time, or the path to a `.pt` file.
+
+| `--model` | When to use it |
+|---|---|
+| `yolo11n-seg.pt` (default) | Reproduce the published model from its base. |
+| `models/pat-papercup-seg.pt` | **Fine-tune** the published model, for example after adding new images to the dataset. It already detects cups, so it reaches good results in a few epochs. |
+| `yolo11s-seg.pt`, `yolo11m-seg.pt` | Larger YOLO11 models: usually more accurate, but slower and with more VRAM use. |
+| `yolov8n-seg.pt`, `yolo26n-seg.pt`, ... | Other YOLO generations supported by Ultralytics. Replace `n` with `s`, `m`, `l` or `x` for larger sizes. |
+
+The model must be a **segmentation** model (its name ends in `-seg`). A detection-only model cannot learn the masks.
+
+Examples:
+
+```powershell
+python train.py --model models/pat-papercup-seg.pt --epochs 50
+python train.py --model yolo11s-seg.pt --batch 8
+python train.py --model yolov8n-seg.pt --name papercup-yolov8n
+```
+
+### Options
+
+| Option | Default | Description |
 |---|---|---|
-| `epochs` | 200 | |
-| `imgsz` | 640 | |
-| `batch` | 16 | Uses about 2 GB of VRAM |
-| `freeze` | 10 | The first 10 layers (backbone) are frozen |
-| `workers` | 2 | Data loading processes |
-| `device` | `cuda` | |
+| `--model` | `yolo11n-seg.pt` | Starting model (see above) |
+| `--epochs` | `200` | Number of epochs. Training stops early if validation does not improve for 100 epochs. |
+| `--batch` | `16` | Images per batch. With YOLO11n-seg this uses about 2.3 GB of VRAM. Lower it if you run out of GPU memory. |
+| `--freeze` | `10` | Number of initial layers (the backbone) kept frozen. This speeds up training and keeps the pretrained features. Use `0` to train all layers. |
+| `--workers` | `2` | Data loading processes |
+| `--name` | `pat-papercup-seg` | Name of the output folder |
 
-Results are saved in `runs/segment/pat-papercup-seg_v2/`:
+The image size is fixed at 640 and the GPU is used when available.
 
-- `weights/best.pt`: the model with the best validation score. Copy it to `models/` to use it in the other scripts.
-- `weights/last.pt`: the latest checkpoint. Resume an interrupted run with `YOLO("runs/segment/pat-papercup-seg_v2/weights/last.pt").train(resume=True)`.
+### Results
+
+Results are saved in `runs/segment/<name>/`. If the folder already exists, a number is appended (`<name>2`, `<name>3`, ...).
+
+- `weights/best.pt`: the model with the best validation score. Copy it to `models/pat-papercup-seg.pt` to use it in the other scripts, or pass it with `--model`.
+- `weights/last.pt`: the latest checkpoint. Resume an interrupted run with `yolo train resume model=runs/segment/<name>/weights/last.pt`.
 - `results.csv`, `results.png`, confusion matrices and example predictions.
 
-> **Windows:** if training crashes with `OSError: [WinError 1455] The paging file is too small`, lower `workers` in `train.py` (to 1 or 0), or increase the Windows paging file size. Each data loading worker loads its own copy of the PyTorch CUDA libraries.
+> **Windows:** if training crashes with `OSError: [WinError 1455] The paging file is too small`, lower `--workers` (to 1 or 0), or increase the Windows paging file size. Each data loading worker loads its own copy of the PyTorch CUDA libraries.
 
 ## 3. Test
+
+Both scripts use `models/pat-papercup-seg.pt` by default (see [Download the trained model](#download-the-trained-model)). To test another model, such as one you trained, pass it with `--model`:
+
+```powershell
+python yolo_video.py --model runs/segment/pat-papercup-seg/weights/best.pt
+```
 
 ### Test videos
 
@@ -148,6 +208,7 @@ Cups with smaller masks, such as those cut off at the image border, are still se
 | Option | Default | Description |
 |---|---|---|
 | `video` | `papercup_light.mp4` | Path, or a file name inside `videos/` |
+| `--model` | `models/pat-papercup-seg.pt` | Model to use |
 | `--conf` | `0.25` | Minimum detection confidence |
 | `--step` | off | Advance one frame per key press |
 
@@ -160,7 +221,7 @@ python yolo_webcam.py
 python yolo_webcam.py --camera 1 --conf 0.5
 ```
 
-This shows the camera image with the predicted masks and boxes. The default confidence is `0.75` and the default camera index is `0`. Press `q` to quit.
+This shows the camera image with the predicted masks and boxes. The options are `--model` (default `models/pat-papercup-seg.pt`), `--camera` (default `0`) and `--conf` (default `0.75`). Press `q` to quit.
 
 ## 4. Robot integration (socket scripts)
 

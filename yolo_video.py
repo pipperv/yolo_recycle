@@ -12,6 +12,7 @@ MIN_AREA = 20000
 
 parser = argparse.ArgumentParser()
 parser.add_argument("video", nargs="?", default="papercup_light.mp4", help="ruta o nombre de un archivo en videos/")
+parser.add_argument("--model", type=Path, default=MODEL_PATH)
 parser.add_argument("--conf", type=float, default=0.25)
 parser.add_argument("--step", action="store_true", help="avanzar frame a frame con cualquier tecla")
 args = parser.parse_args()
@@ -21,10 +22,12 @@ if not video_path.is_file():
     video_path = VIDEOS_DIR / args.video
 if not video_path.is_file():
     raise SystemExit(f"No se encontró el video: {args.video}")
+if not args.model.is_file():
+    raise SystemExit(f"No se encontró el modelo: {args.model}. Descárgalo como indica el README.")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Loading YOLO model on {device}...")
-model = YOLO(MODEL_PATH)
+model = YOLO(args.model)
 
 cap = cv2.VideoCapture(str(video_path))
 

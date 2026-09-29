@@ -3,7 +3,8 @@ venv/
 venv_old/
 __pycache__/
 
-# Dataset, training outputs and large media (download them, see README)
+# Models, dataset, training outputs and large media (download them, see README)
+*.pt
 pat-papercup-seg/
 runs/
 weights/

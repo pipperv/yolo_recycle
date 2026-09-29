@@ -1,13 +1,27 @@
+import argparse
+
 import torch
 from ultralytics import YOLO
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", default="yolo11n-seg.pt",
+                        help="modelo de partida: base de Ultralytics (se descarga solo) o un .pt propio")
+    parser.add_argument("--epochs", type=int, default=200)
+    parser.add_argument("--batch", type=int, default=16)
+    parser.add_argument("--workers", type=int, default=2)
+    parser.add_argument("--freeze", type=int, default=10)
+    parser.add_argument("--name", default="pat-papercup-seg")
+    args = parser.parse_args()
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     torch.cuda.empty_cache()
-    model = YOLO("models/pat-papercup-seg.pt")  # load a pretrained model (recommended for training)
-    results = model.train(data="data.yaml",
-                          epochs=200,
-                          imgsz=640, device='cuda',
-                          name="pat-papercup-seg_v2",
-                          freeze=10,
-                          batch=16,
-                          workers=2)
+    model = YOLO(args.model)
+    model.train(data="data.yaml",
+                epochs=args.epochs,
+                imgsz=640,
+                device=device,
+                name=args.name,
+                freeze=args.freeze,
+                batch=args.batch,
+                workers=args.workers)
