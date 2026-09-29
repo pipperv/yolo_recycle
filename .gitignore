@@ -1,0 +1,12 @@
+.env
+venv/
+venv_old/
+__pycache__/
+
+# Dataset, training outputs and large media (download them, see README)
+pat-papercup-seg/
+runs/
+weights/
+videos/
+record/
+train.log

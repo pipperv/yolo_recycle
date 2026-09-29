@@ -1,0 +1,13 @@
+train: ../pat-papercup-seg/train/images
+val: ../pat-papercup-seg/valid/images
+test: ../pat-papercup-seg/test/images
+
+nc: 1
+names: ['paper_cup']
+
+roboflow:
+  workspace: pat-industrial
+  project: paper-cup-segment-7v9uf
+  version: 1
+  license: Private
+  url: https://app.roboflow.com/pat-industrial/paper-cup-segment-7v9uf/1
