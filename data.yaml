@@ -9,5 +9,5 @@ roboflow:
   workspace: pat-industrial
   project: paper-cup-segment-7v9uf
   version: 1
-  license: Private
+  license: CC BY 4.0
   url: https://app.roboflow.com/pat-industrial/paper-cup-segment-7v9uf/1
